@@ -12,11 +12,43 @@ Usaremos **PyInstaller** para este propósito.
     ```bash
     pip install Pillow pdf2image
     ```
-4.  **Tesseract OCR**: Tesseract (incluyendo las herramientas de desarrollo/entrenamiento como `tesseract`, `unicharset_extractor`, `mftraining`, `cntraining`, `combine_tessdata`) DEBE estar instalado en el sistema donde se **ejecutará** el `.exe` final, y sus ejecutables deben estar en el PATH del sistema. PyInstaller **no** empaqueta Tesseract en sí mismo.
-5.  **Poppler**: Para la funcionalidad de procesamiento de PDF, Poppler DEBE estar instalado en el sistema donde se **ejecutará** el `.exe` final, y las utilidades de Poppler (específicamente `pdftoppm` y `pdfinfo`) deben estar en el PATH del sistema o accesibles para la biblioteca `pdf2image`. PyInstaller **no** empaqueta Poppler.
-    *   Puedes descargar Poppler para Windows desde [varias fuentes no oficiales](https://github.com/oschwartz10612/poppler-windows/releases/) que compilan los binarios. Asegúrate de añadir la carpeta `bin` de Poppler a tu PATH.
+4.  **Tesseract OCR**: Tesseract (incluyendo las herramientas de desarrollo/entrenamiento como `tesseract`, `unicharset_extractor`, `mftraining`, `cntraining`, `combine_tessdata`) DEBE estar instalado en el sistema donde se **ejecutará** el `.exe` final, y sus ejecutables deben estar en el PATH del sistema. PyInstaller **no** empaqueta Tesseract en sí mismo. (Consulta la documentación oficial de Tesseract para su instalación).
 
-## Pasos para Empaquetar
+5.  **Poppler (para funcionalidad PDF)**:
+    *   La biblioteca `pdf2image` que usa la aplicación para procesar archivos PDF depende de Poppler.
+    *   Poppler DEBE estar instalado en el sistema donde se **ejecutará** el `.exe` final, y las utilidades de Poppler (específicamente `pdftoppm.exe` y `pdfinfo.exe`) deben estar accesibles a través del PATH del sistema.
+    *   PyInstaller **no** empaqueta Poppler.
+
+    **Cómo Instalar Poppler en Windows y Añadirlo al PATH:**
+
+    1.  **Descargar Poppler para Windows:**
+        *   Poppler no tiene un instalador oficial simple para Windows. Necesitarás descargar una compilación de los binarios.
+        *   Una fuente común y recomendada es la página de versiones del proyecto `poppler-windows` en GitHub de @oschwartz10612: [https://github.com/oschwartz10612/poppler-windows/releases/](https://github.com/oschwartz10612/poppler-windows/releases/)
+        *   Descarga la última versión disponible (por ejemplo, `poppler-23.11.0-0_Windows.zip` o similar). Elige la versión que corresponda a tu sistema (32 o 64 bits, aunque las versiones más recientes suelen ser de 64 bits).
+
+    2.  **Descomprimir Poppler:**
+        *   Crea una carpeta en tu sistema donde quieras guardar Poppler. Por ejemplo: `C:\Program Files\poppler` o `C:\poppler`.
+        *   Descomprime el contenido del archivo ZIP que descargaste dentro de esta carpeta. Deberías terminar con una estructura de carpetas como `C:\poppler\poppler-23.11.0-0in`, `C:\poppler\poppler-23.11.0\lib`, etc. (La ruta exacta de la subcarpeta con la versión puede variar).
+        *   La carpeta crucial es la que contiene los archivos `.exe` como `pdftoppm.exe`. Usualmente es la subcarpeta `bin` o a veces `Libraryin` dentro de la carpeta de la versión de Poppler (ej: `C:\poppler\poppler-23.11.0-0in`). **Identifica y anota esta ruta completa.**
+
+    3.  **Añadir la Carpeta `bin` de Poppler al PATH del Sistema:**
+        *   Haz clic en el botón de **Inicio** de Windows.
+        *   Escribe "**variables de entorno**" en la barra de búsqueda.
+        *   Selecciona "**Editar las variables de entorno del sistema**". Esto abrirá la ventana de "Propiedades del sistema".
+        *   En la pestaña "**Opciones avanzadas**", haz clic en el botón "**Variables de entorno...**".
+        *   En la nueva ventana "Variables de entorno", en la sección inferior "**Variables del sistema**", busca la variable llamada `Path` (o `PATH`). Selecciónala.
+        *   Haz clic en el botón "**Editar...**".
+        *   En la ventana "Editar la variable de entorno", haz clic en "**Nuevo**".
+        *   Pega la ruta completa a la carpeta `bin` de Poppler que anotaste anteriormente (ej: `C:\poppler\poppler-23.11.0-0in`).
+        *   Haz clic en "**Aceptar**" en todas las ventanas abiertas ("Editar la variable de entorno", "Variables de entorno", "Propiedades del sistema") para guardar los cambios.
+
+    4.  **Verificar y Reiniciar:**
+        *   Para que los cambios en el PATH tengan efecto, **reinicia cualquier Símbolo del sistema (cmd) o PowerShell que tengas abierto**.
+        *   **Reinicia la aplicación de entrenamiento Tesseract** si la tenías abierta.
+        *   Si el problema persiste, un **reinicio completo de tu computadora** puede ser necesario.
+        *   Para verificar si Poppler está en el PATH, puedes abrir un nuevo Símbolo del sistema y escribir `pdftoppm -h`. Si no da un error de comando no encontrado, Poppler está configurado.
+
+## Pasos para Empaquetar con PyInstaller
 
 1.  **Instalar PyInstaller**:
     Abre una terminal o símbolo del sistema y ejecuta:
@@ -34,31 +66,23 @@ Usaremos **PyInstaller** para este propósito.
     ```
     Desglose del comando:
     *   `pyinstaller`: Llama a la herramienta.
-    *   `--onefile`: Crea un único archivo `.exe` (puede tardar más en iniciar, pero es más simple de distribuir). Si omites esto, creará una carpeta con muchos archivos junto al `.exe`.
-    *   `--windowed`: Suprime la aparición de una ventana de consola cuando se ejecuta la aplicación GUI.
-    *   `--name EntrenadorTesseract`: Especifica el nombre que tendrá el archivo `.exe` resultante (ej. `EntrenadorTesseract.exe`).
-    *   `app_entrenamiento_tesseract.py`: Es el script principal de tu aplicación.
+    *   `--onefile`: Crea un único archivo `.exe`.
+    *   `--windowed`: Suprime la ventana de consola para aplicaciones GUI.
+    *   `--name EntrenadorTesseract`: Nombre del `.exe` resultante (ej. `EntrenadorTesseract.exe`).
+    *   `app_entrenamiento_tesseract.py`: Script principal.
 
 4.  **Encontrar el Ejecutable**:
-    PyInstaller creará varias carpetas (`build`, `dist`) y un archivo `.spec`.
-    *   Tu archivo `.exe` final estará dentro de la carpeta `dist`. Por ejemplo, `dist/EntrenadorTesseract.exe`.
+    El `.exe` estará en la carpeta `dist` (ej. `dist/EntrenadorTesseract.exe`).
 
 ## Consideraciones Adicionales
 
-*   **Icono de la Aplicación**: Puedes añadir un icono personalizado a tu `.exe` usando la opción `--icon=tu_icono.ico` en el comando de PyInstaller. Asegúrate de que `tu_icono.ico` exista.
-    ```bash
-    pyinstaller --onefile --windowed --name EntrenadorTesseract --icon=app_icon.ico app_entrenamiento_tesseract.py
-    ```
-*   **Archivos de Datos y Hook (Avanzado)**:
-    *   Nuestra aplicación actual no usa archivos de datos externos que necesite empaquetar (como imágenes o configuraciones JSON propias).
-    *   Sin embargo, `pdf2image` depende de Poppler, y Tesseract es una dependencia externa. PyInstaller no puede empaquetar estas dependencias de sistema. El usuario final **siempre** necesitará tener Tesseract y Poppler correctamente instalados y en su PATH. Debes comunicar esto claramente.
+*   **Icono de la Aplicación**: Usa `--icon=tu_icono.ico` para añadir un icono.
+*   **Dependencias Externas**: Recuerda, Tesseract y Poppler deben estar instalados y en el PATH del sistema donde se ejecute el `.exe`. Comunica esto claramente al distribuir la aplicación.
 *   **Errores Comunes**:
-    *   **`FileNotFoundError` para Tesseract/Poppler al correr el `.exe`**: Esto significa que Tesseract o Poppler no están en el PATH del sistema donde se está ejecutando el `.exe`.
-    *   **Módulos no encontrados por PyInstaller**: A veces, PyInstaller no detecta automáticamente todos los módulos importados (especialmente los "ocultos" o los importados dinámicamente). Podrías necesitar usar la opción `--hidden-import MODULENAME` o editar el archivo `.spec` generado. Para `pdf2image` y `Pillow`, esto no suele ser un problema.
-*   **Tamaño del Ejecutable**: Los ejecutables `--onefile` pueden ser grandes porque empaquetan una versión de Python y las bibliotecas necesarias.
-*   **Pruebas**: Siempre prueba tu ejecutable en una máquina limpia (o una máquina virtual) que no tenga tu entorno de desarrollo Python, pero SÍ tenga Tesseract y Poppler instalados, para simular la experiencia del usuario final.
+    *   `FileNotFoundError` para Tesseract/Poppler: Indica que no están en el PATH del sistema destino.
+    *   Módulos no encontrados por PyInstaller: Usa `--hidden-import MODULENAME` o edita el archivo `.spec`.
+*   **Tamaño del Ejecutable**: Los ejecutables `--onefile` pueden ser grandes.
+*   **Pruebas**: Prueba siempre en una máquina limpia (o VM) con Tesseract y Poppler instalados, pero sin tu entorno de desarrollo Python.
 
 ## Limpieza
-Después de generar el ejecutable, puedes eliminar las carpetas `build` y el archivo `.spec` si lo deseas. Mantén la carpeta `dist` que contiene tu `.exe`.
-
-Esta guía debería ser suficiente para empezar a empaquetar tu aplicación. ¡Buena suerte!
+Puedes eliminar las carpetas `build` y el archivo `.spec` después de generar el ejecutable.
