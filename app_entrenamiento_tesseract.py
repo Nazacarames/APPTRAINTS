@@ -5,28 +5,23 @@ import shutil
 import subprocess
 import threading
 import glob
-from PIL import Image # Asegurarse que Pillow está importado
+from PIL import Image
 
-# Intentar importar pdf2image y manejar si no está disponible
 try:
     from pdf2image import convert_from_path
-    # Importar excepciones específicas puede ser útil para un manejo de errores más granular
     from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError, PDFSyntaxError, PDFPopplerTimeoutError
     PDF2IMAGE_AVAILABLE = True
 except ImportError:
     PDF2IMAGE_AVAILABLE = False
-    # Esta variable global se puede chequear luego en la app
-    # para habilitar/deshabilitar funcionalidad PDF.
 
 class TesseractTrainerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Herramienta de Entrenamiento Tesseract (con soporte PDF)") # Título actualizado
+        self.root.title("Herramienta de Entrenamiento Tesseract (con soporte PDF)")
         self.root.geometry("800x750")
 
-        self.image_paths_with_text = {} # Clave: ruta absoluta de la imagen (sea original o extraída de PDF)
+        self.image_paths_with_text = {}
         self.training_base_dir = "datos_entrenamiento_tesseract"
-        # Directorio para imágenes extraídas temporalmente de PDFs
         self.pdf_temp_image_dir = os.path.join(self.training_base_dir, "pdf_imagenes_extraidas")
 
         self.current_training_dir = None
@@ -34,7 +29,6 @@ class TesseractTrainerApp:
         self.model_name = ""
         self.font_name = "customfont"
 
-        # Crear directorio para imágenes extraídas de PDF si no existe y pdf2image está disponible
         if PDF2IMAGE_AVAILABLE:
             try:
                 os.makedirs(self.pdf_temp_image_dir, exist_ok=True)
@@ -42,13 +36,11 @@ class TesseractTrainerApp:
                 print(f"Advertencia: No se pudo crear el directorio para imágenes de PDF: {e}")
 
         if not PDF2IMAGE_AVAILABLE:
-            # Este mensaje se imprimirá en la consola donde se ejecute el script.
             print("ADVERTENCIA INICIAL: La biblioteca pdf2image no se encontró o Poppler no está configurado.")
             print("La funcionalidad para procesar archivos PDF no estará disponible.")
-            print("Asegúrate de instalar pdf2image (pip install pdf2image) y Poppler (https://poppler.freedesktop.org/).")
+            # Considerar mostrar esto en el log de la GUI también al inicio.
+            # self.log_message("ADVERTENCIA: pdf2image/Poppler no disponible. Carga de PDFs deshabilitada.") # No se puede llamar a log_message aquí aún.
 
-
-        # --- UI ---
         top_frame = Frame(root)
         top_frame.pack(pady=10)
         Label(top_frame, text="Código de Idioma (ej: spa):").pack(side=tk.LEFT, padx=5)
@@ -86,7 +78,6 @@ class TesseractTrainerApp:
         Label(log_frame, text="Log de Actividad y Entrenamiento:").pack()
         self.log_text_widget = scrolledtext.ScrolledText(log_frame, height=15, state=tk.DISABLED, wrap=tk.WORD)
         self.log_text_widget.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
-        # --- Fin UI ---
 
     def log_message(self, message, clear_log=False):
         self.root.after(0, self._log_message_thread_safe, message, clear_log)
@@ -100,7 +91,6 @@ class TesseractTrainerApp:
 
     def _clean_filename(self, filename):
         name, ext = os.path.splitext(filename)
-        # Simplificado para solo reemplazar espacios, que es lo más común y problemático.
         name = name.replace(" ", "_")
         return name + ext
 
@@ -108,7 +98,7 @@ class TesseractTrainerApp:
         if not PDF2IMAGE_AVAILABLE:
             self.log_message("Error: pdf2image no está instalado o Poppler no está configurado.")
             self.root.after(0, messagebox.showerror, "Error de PDF", "pdf2image/Poppler no disponible.", {"parent": self.root})
-            return None # Retorna None para indicar fallo
+            return None
 
         self.log_message(f"Iniciando conversión de PDF: {os.path.basename(pdf_path)}...")
         try:
@@ -121,52 +111,42 @@ class TesseractTrainerApp:
         extracted_image_paths = []
         try:
             pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
-            pdf_basename = self._clean_filename(pdf_basename) # Limpiar nombre base del PDF
-
-            # Obtener objetos PIL de cada página del PDF
+            pdf_basename = self._clean_filename(pdf_basename)
             pil_images = convert_from_path(pdf_path, dpi=300, thread_count=os.cpu_count() or 1)
-
             if not pil_images:
                 self.log_message(f"pdf2image no retornó imágenes para {os.path.basename(pdf_path)}. ¿PDF vacío o dañado?")
                 return None
-
             for i, image_obj in enumerate(pil_images):
                 page_num = i + 1
-                image_filename = f"{pdf_basename}_pagina_{page_num}.png" # Crear nombre de archivo PNG
+                image_filename = f"{pdf_basename}_pagina_{page_num}.png"
                 image_full_path = os.path.join(self.pdf_temp_image_dir, image_filename)
-
                 try:
-                    image_obj.save(image_full_path, "PNG") # Guardar la imagen como PNG
+                    image_obj.save(image_full_path, "PNG")
                     extracted_image_paths.append(image_full_path)
                 except Exception as save_e:
                     self.log_message(f"Error al guardar la página {page_num} de {pdf_basename} como imagen: {save_e}")
-                    # Considerar si continuar con otras páginas o fallar todo. Por ahora, continuamos.
-
-            if not extracted_image_paths: # Si ninguna página se pudo guardar
+            if not extracted_image_paths:
                  self.log_message(f"No se pudieron extraer y guardar páginas válidas de {pdf_basename}.")
-                 return None # Indica que no se obtuvieron imágenes utilizables
-
+                 return None
             self.log_message(f"PDF '{os.path.basename(pdf_path)}' convertido a {len(extracted_image_paths)} imágenes en '{self.pdf_temp_image_dir}'.")
-            return extracted_image_paths # Lista de rutas a las imágenes PNG generadas
-        except PDFInfoNotInstalledError: # Específico de Poppler no encontrado
+            return extracted_image_paths
+        except PDFInfoNotInstalledError:
             self.log_message("Error de Poppler: Poppler no está instalado o no se encuentra en el PATH del sistema.")
             self.root.after(0, messagebox.showerror, "Error de Poppler", "Poppler no encontrado. Instálalo y asegúrate que esté en el PATH.", {"parent": self.root})
             return None
-        except (PDFPageCountError, PDFSyntaxError) as e: # Errores comunes de PDF dañado/inválido
+        except (PDFPageCountError, PDFSyntaxError) as e:
             self.log_message(f"Error en el archivo PDF '{os.path.basename(pdf_path)}': {e}")
             self.root.after(0, messagebox.showerror, "Error de PDF", f"El PDF '{os.path.basename(pdf_path)}' es inválido o está corrupto: {e}", {"parent": self.root})
             return None
-        except PDFPopplerTimeoutError as e: # Timeout
+        except PDFPopplerTimeoutError as e:
             self.log_message(f"Timeout al procesar PDF '{os.path.basename(pdf_path)}' con Poppler: {e}")
             self.root.after(0, messagebox.showerror, "Error de PDF", f"Timeout procesando PDF '{os.path.basename(pdf_path)}'.", {"parent": self.root})
             return None
-        except Exception as e: # Otros errores (ej. permisos de escritura, etc.)
+        except Exception as e:
             self.log_message(f"Error inesperado durante conversión de PDF '{os.path.basename(pdf_path)}': {type(e).__name__} - {e}")
             self.root.after(0, messagebox.showerror, "Error de Conversión PDF", f"Fallo inesperado al convertir PDF: {e}", {"parent": self.root})
             return None
 
-    # add_files es el antiguo add_images, renombrado.
-    # La lógica para manejar PDF (usar _convert_pdf_to_images) se añadirá en el siguiente paso.
     def add_files(self):
         filetypes = (
             ('Archivos Soportados', '*.png *.tif *.tiff *.jpg *.jpeg *.pdf'),
@@ -176,44 +156,57 @@ class TesseractTrainerApp:
             ('Documentos PDF', '*.pdf'),
             ('Todos los archivos', '*.*')
         )
-        # Recordar la última ruta usada para FileDialog (mejora UX)
-        initial_dir = getattr(self, "_last_filedialog_path", "/")
+        initial_dir = getattr(self, "_last_filedialog_path", os.path.expanduser("~"))
 
         selected_files = filedialog.askopenfilenames(
             title='Selecciona imágenes o PDFs para entrenar',
             filetypes=filetypes,
-            initialdir=initial_dir, # Iniciar en el último directorio usado
+            initialdir=initial_dir,
             parent=self.root
         )
 
         if selected_files:
-            self._last_filedialog_path = os.path.dirname(selected_files[0]) # Guardar ruta para próxima vez
+            self._last_filedialog_path = os.path.dirname(selected_files[0])
             new_items_added_to_listbox = False
-            for file_path_orig in selected_files:
-                file_path = file_path_orig
 
+            for file_path_orig in selected_files:
                 base_name_orig = os.path.basename(file_path_orig)
 
-                if file_path.lower().endswith(".pdf"):
+                if file_path_orig.lower().endswith(".pdf"):
                     if PDF2IMAGE_AVAILABLE:
-                        self.log_message(f"PDF '{base_name_orig}' seleccionado. Procesamiento se implementará en el Paso 2.")
-                        # Lógica de conversión y adición de imágenes de PDF irá aquí en el siguiente paso.
-                    else:
+                        self.log_message(f"Procesando PDF: {base_name_orig}...")
+                        image_paths_from_pdf = self._convert_pdf_to_images(file_path_orig) # Esto ya loguea el resultado de la conversión
+
+                        if image_paths_from_pdf: # Si la conversión fue exitosa y retornó rutas
+                            for img_path in image_paths_from_pdf:
+                                if img_path not in self.image_paths_with_text:
+                                    self.image_paths_with_text[img_path] = ""
+                                    # Añadir la ruta de la imagen extraída al listbox, para que el usuario le asigne texto
+                                    self.image_listbox.insert(tk.END, f"{img_path} - ''")
+                                    self.log_message(f"Imagen de PDF '{os.path.basename(img_path)}' añadida a la lista para asignación de texto.")
+                                    new_items_added_to_listbox = True
+                                else:
+                                    self.log_message(f"Imagen de PDF '{os.path.basename(img_path)}' ya estaba en la lista.")
+                        # else: _convert_pdf_to_images ya habrá logueado el error/fallo.
+                    else: # PDF2IMAGE_AVAILABLE es False
                         self.log_message(f"PDF '{base_name_orig}' ignorado; pdf2image/Poppler no disponible.")
-                        messagebox.showwarning("PDF no Soportado", "Carga de PDFs deshabilitada (pdf2image/Poppler no disponible).", parent=self.root)
-                elif file_path.lower().endswith(('.png', '.tif', '.tiff', '.jpg', '.jpeg')):
-                    # Sanitize filename para imágenes directas
+                        messagebox.showwarning("PDF no Soportado", "Carga de PDFs deshabilitada (pdf2image o Poppler no están instalados/configurados correctamente).", parent=self.root)
+
+                elif file_path_orig.lower().endswith(('.png', '.tif', '.tiff', '.jpg', '.jpeg')):
+                    file_path = file_path_orig
                     original_dir = os.path.dirname(file_path)
                     sanitized_basename = self._clean_filename(base_name_orig)
 
                     if base_name_orig != sanitized_basename:
                         sanitized_full_path = os.path.join(original_dir, sanitized_basename)
                         try:
-                            if os.path.exists(sanitized_full_path) and file_path.lower() != sanitized_full_path.lower(): # Evitar renombrar a sí mismo si solo cambia case
-                                self.log_message(f"Advertencia: Archivo sanitizado '{sanitized_basename}' ya existe. Usando nombre original.")
-                            else:
+                            if os.path.abspath(file_path).lower() != os.path.abspath(sanitized_full_path).lower() and                                not os.path.exists(sanitized_full_path):
                                 os.rename(file_path, sanitized_full_path)
                                 self.log_message(f"Archivo renombrado: '{base_name_orig}' -> '{sanitized_basename}'")
+                                file_path = sanitized_full_path
+                            elif os.path.exists(sanitized_full_path) and os.path.abspath(file_path).lower() != os.path.abspath(sanitized_full_path).lower():
+                                 self.log_message(f"Advertencia: '{sanitized_basename}' ya existe. Usando nombre original '{base_name_orig}'.")
+                            else:
                                 file_path = sanitized_full_path
                         except OSError as e:
                             self.log_message(f"Error al renombrar '{base_name_orig}': {e}. Usando nombre original.")
@@ -226,12 +219,15 @@ class TesseractTrainerApp:
                     else:
                         self.log_message(f"Archivo de imagen ya listado: {os.path.basename(file_path)}")
                 else:
-                    self.log_message(f"Archivo no soportado ignorado: {os.path.basename(file_path)}")
+                    self.log_message(f"Archivo no soportado ignorado: {base_name_orig}")
 
             if new_items_added_to_listbox and self.image_listbox.size() > 0:
                 last_idx = self.image_listbox.size() - 1
-                self.image_listbox.select_clear(0, tk.END); self.image_listbox.select_set(last_idx); self.image_listbox.activate(last_idx)
-                self.on_image_select(None)
+                if self.image_listbox.get(last_idx): # Asegurar que el último ítem no esté vacío
+                    self.image_listbox.select_clear(0, tk.END)
+                    self.image_listbox.select_set(last_idx)
+                    self.image_listbox.activate(last_idx)
+                    self.on_image_select(None) # Actualizar estado de botones
             self.update_train_button_state()
         else:
             self.log_message("No se seleccionaron archivos.")
@@ -264,15 +260,20 @@ class TesseractTrainerApp:
         selected_index = selected_indices[0]
         listbox_entry_text = self.image_listbox.get(selected_index)
         image_path_to_remove = listbox_entry_text.split(" - '")[0] if " - '" in listbox_entry_text else listbox_entry_text
-        if messagebox.askyesno("Confirmar", f"¿Remover {os.path.basename(image_path_to_remove)} de la lista?", parent=self.root):
+
+        confirm_msg = f"¿Remover '{os.path.basename(image_path_to_remove)}' de la lista?"
+        is_pdf_extracted_image = self.pdf_temp_image_dir is not None and self.pdf_temp_image_dir in os.path.normpath(image_path_to_remove)
+
+        if messagebox.askyesno("Confirmar", confirm_msg, parent=self.root):
             self.image_listbox.delete(selected_index)
             if image_path_to_remove in self.image_paths_with_text: del self.image_paths_with_text[image_path_to_remove]
-            if self.pdf_temp_image_dir is not None and self.pdf_temp_image_dir in image_path_to_remove: # Check if it's a PDF-extracted image
-                 self.log_message(f"Nota: {os.path.basename(image_path_to_remove)} es una imagen extraída de PDF.")
-                 # Consider deleting from self.pdf_temp_image_dir if it's the last reference,
-                 # but that adds complexity (reference counting or checking if other pages from same PDF exist).
-                 # For now, just log. Files in pdf_temp_image_dir are temporary.
-            self.log_message(f"Ítem removido de la lista: {os.path.basename(image_path_to_remove)}")
+
+            if is_pdf_extracted_image:
+                 self.log_message(f"Ítem removido: {os.path.basename(image_path_to_remove)} (imagen de PDF).")
+                 # No se elimina del disco automáticamente por defecto.
+            else:
+                self.log_message(f"Ítem removido de la lista: {os.path.basename(image_path_to_remove)}")
+
             if self.image_listbox.size() == 0: self.set_image_text_button.config(state=tk.DISABLED); self.remove_image_button.config(state=tk.DISABLED)
             elif selected_index > 0: self.image_listbox.select_set(selected_index -1); self.image_listbox.activate(selected_index -1)
             elif self.image_listbox.size() > 0: self.image_listbox.select_set(0); self.image_listbox.activate(0)
@@ -295,34 +296,24 @@ class TesseractTrainerApp:
         if enabled: self.update_train_button_state()
 
     def _ask_clean_directory(self, dir_path):
-        # Esta función se llamará desde el hilo principal ANTES de lanzar el worker thread.
-        # Retorna True si el usuario acepta limpiar o si el directorio no existe (nada que limpiar).
-        # Retorna False si el usuario no acepta limpiar, o si la limpieza falla.
-        if not os.path.exists(dir_path):
-            return True # No existe, no hay nada que preguntar/limpiar, proceder.
-
+        if not os.path.exists(dir_path): return None # Corrección: debería ser True si no existe, o manejar None en el llamador
         response = messagebox.askyesno("Confirmar Limpieza",
-                                       f"El directorio de entrenamiento '{dir_path}' ya existe y podría contener archivos de un proceso anterior. ¿Quieres limpiarlo (eliminar su contenido) y continuar?",
+                                       f"El directorio '{dir_path}' ya existe y podría contener archivos de un proceso anterior. ¿Quieres limpiarlo (eliminar su contenido) y continuar?",
                                        parent=self.root)
-        if response: # Usuario dice SÍ a limpiar
+        if response:
             self.log_message(f"Usuario aceptó limpiar directorio '{dir_path}'.")
             try:
                 shutil.rmtree(dir_path)
                 os.makedirs(dir_path, exist_ok=True)
                 self.log_message(f"Directorio '{dir_path}' limpiado y recreado.")
-                return True # Limpieza exitosa
+                return True
             except Exception as e:
                 self.log_message(f"Error al limpiar el directorio '{dir_path}': {e}")
                 messagebox.showerror("Error de Directorio", f"No se pudo limpiar el directorio '{dir_path}'. Error: {e}", parent=self.root)
-                return False # Falla en la limpieza
-        else: # Usuario dice NO a limpiar
-            self.log_message("Usuario decidió no limpiar el directorio. El entrenamiento podría usar archivos antiguos o fallar si los archivos existentes interfieren.")
-            # Decidir si esto es un error fatal o una advertencia. Por ahora, se considera una decisión del usuario de no continuar.
-            # Si se quisiera permitir continuar sin limpiar, se retornaría True aquí.
-            # Pero es más seguro abortar si el usuario no quiere limpiar un dir potencialmente conflictivo.
-            messagebox.showwarning("Entrenamiento Cancelado", "El entrenamiento fue cancelado porque el directorio de trabajo no fue limpiado.", parent=self.root)
-            return False
-
+                return False
+        else:
+            self.log_message("Usuario decidió no limpiar el directorio. El entrenamiento podría usar archivos antiguos o fallar.")
+            return True # Permitir continuar si el usuario no quiere limpiar. El pipeline podría fallar.
 
     def start_training_thread(self):
         self.log_message("Validando datos...", clear_log=True)
@@ -335,13 +326,18 @@ class TesseractTrainerApp:
 
         self.current_training_dir = os.path.join(self.training_base_dir, f"{self.lang_code}-training-files")
 
-        clean_result = self._ask_clean_directory(self.current_training_dir)
-        if not clean_result:
-            self.log_message("Limpieza de directorio de entrenamiento rechazada o fallida. Abortando entrenamiento.")
+        # Manejo de _ask_clean_directory:
+        # Si retorna None (directorio no existe), crearlo.
+        # Si retorna True (limpiado o usuario no quiso limpiar y se permite continuar), proceder.
+        # Si retorna False (limpieza falló), abortar.
+        clean_status = self._ask_clean_directory(self.current_training_dir)
+
+        if clean_status is False:
+            self.log_message("Limpieza de directorio de entrenamiento fallida. Abortando entrenamiento.")
             return
 
-        try:
-            os.makedirs(self.current_training_dir, exist_ok=True) # Asegurar que existe después de la limpieza
+        try: # Asegurar que el directorio existe (sea porque se limpió, no se limpió, o no existía antes)
+            os.makedirs(self.current_training_dir, exist_ok=True)
         except Exception as e:
             self.log_message(f"Error creando directorio de entrenamiento '{self.current_training_dir}': {e}")
             messagebox.showerror("Error Directorio", f"No se pudo crear directorio de entrenamiento: {e}", parent=self.root)
@@ -398,8 +394,8 @@ class TesseractTrainerApp:
             self.log_message(f"Ejecutando en '{working_dir}': {' '.join(command_parts)}")
             process = subprocess.Popen(command_parts, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace')
             stdout, stderr = process.communicate(timeout=600)
-            if stdout and stdout.strip(): self.log_message(f"Salida '{os.path.basename(command_parts[0])}':\n{stdout.strip()}")
-            if stderr and stderr.strip(): self.log_message(f"Errores '{os.path.basename(command_parts[0])}':\n{stderr.strip()}")
+            if stdout: self.log_message(f"Salida '{os.path.basename(command_parts[0])}':\n{stdout.strip()}") # Corregido para mostrar basename
+            if stderr: self.log_message(f"Errores '{os.path.basename(command_parts[0])}':\n{stderr.strip()}") # Corregido para mostrar basename
             if process.returncode != 0: self.log_message(f"Comando '{os.path.basename(command_parts[0])}' falló (cód: {process.returncode})"); return False
             if check_file and not os.path.exists(os.path.join(working_dir, check_file)):
                 self.log_message(f"Archivo esperado '{check_file}' no encontrado tras '{os.path.basename(command_parts[0])}'."); return False
@@ -411,10 +407,7 @@ class TesseractTrainerApp:
     def _run_tesseract_box_generation(self, prepared_files_info):
         self.log_message("--- Generando archivos .box y .tr ---")
         for file_info in prepared_files_info:
-            img_path = file_info['image']; base_name = file_info['base'] # img_path es absoluto aqui
-            # tesseract necesita path de imagen, path base de salida.
-            # Aquí, la imagen ya está en current_training_dir, pero pasamos path absoluto por claridad
-            # y el nombre base para los outputs también en current_training_dir
+            img_path = file_info['image']; base_name = file_info['base']
             cmd = ["tesseract", img_path, os.path.join(self.current_training_dir, base_name), "nobatch", "box.train"]
             if not self._run_command(cmd, self.current_training_dir, check_file=f"{base_name}.box"): return False
             if not os.path.exists(os.path.join(self.current_training_dir, f"{base_name}.tr")): self.log_message(f"Advertencia: {base_name}.tr no encontrado.")
@@ -482,7 +475,6 @@ class TesseractTrainerApp:
         self.log_message("--- Combinando a .traineddata ---")
         cmd = ["combine_tessdata", f"{self.lang_code}."]
         return self._run_command(cmd, self.current_training_dir, check_file=f"{self.lang_code}.traineddata")
-
 
 if __name__ == "__main__":
     root = tk.Tk()
